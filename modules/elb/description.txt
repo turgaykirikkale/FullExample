@@ -1,0 +1,80 @@
+ELB, or **Elastic Load Balancing**, is a load balancing service provided by Amazon Web Services (AWS). 
+This service automatically distributes incoming traffic across multiple Amazon EC2 instances or other targets, enhancing the reliability and availability of your applications. 
+ELB is used to ensure scalability, manage application traffic, and optimize network resources.
+
+AWS ELB comes in three main types:
+
+1. **Application Load Balancer (ALB)**: Works at the application layer (Layer 7) and is ideal for HTTP/HTTPS traffic. 
+With host-based and path-based routing, it can route traffic based on URLs. It is especially suitable for microservices and container-based applications.
+
+2. **Network Load Balancer (NLB)**: Operates at the network layer (Layer 4) and is best suited for high-performance TCP traffic. 
+It offers low latency and can handle millions of requests per second.
+
+3. **Gateway Load Balancer (GLB)**: Used in cases involving network security devices and third-party virtual network security appliances. 
+It operates as a scalable, low-latency network load balancer.
+
+The benefits of ELB include:
+
+- **High Availability and Scalability**: Ensures efficient resource usage by distributing traffic.
+- **Security**: Supports SSL/TLS certificates and provides secure connections.
+- **Automatic Failover**: Automatically reroutes traffic to other resources when one resource fails.
+
+In summary, ELB is a service that optimizes traffic, ensuring that your AWS resources operate more efficiently and offer high availability.
+
+Cross zone load balancing is default attributes in ALB, but we need to set for NLB and GLB 
+or we can use   enable_cross_zone_load_balancing = true for taking guaraante
+
+A **Load Balancer SSL certificate** is a digital certificate that enables a load balancer (such as an Application Load Balancer on AWS) to operate over secure connections (HTTPS). SSL (Secure Sockets Layer) or TLS (Transport Layer Security) encrypts data, making communication between client and server secure.
+
+### Features of an SSL Certificate
+
+- **Encryption**: The certificate ensures that all data between the client (typically a browser) and the server (load balancer) is encrypted, protecting sensitive information (passwords, credit card data, etc.) sent over the network.
+  
+- **Authentication**: An SSL certificate authenticates the server’s identity, allowing clients to be certain they are connecting to the intended server.
+  
+- **Security Standard**: Enabling the HTTPS protocol makes applications running on the load balancer reliable and secure.
+
+### Using SSL Certificates with a Load Balancer
+
+1. **Certificate Upload**: On AWS, certificates are often created or uploaded through AWS Certificate Manager (ACM), which provides SSL/TLS certificates for free and automatically renews them.
+   
+2. **Listener and Port Configuration**: To route traffic over HTTPS, a listener is configured on the load balancer, often on port 443, which listens for HTTPS traffic and uses the SSL certificate to secure incoming connections.
+   
+3. **Backend Communication**: The load balancer can forward traffic received over SSL to the servers in the target group, either by maintaining the SSL connection with the backend or terminating it (SSL offloading), which ends the encryption at the load balancer.
+
+### Why Use an SSL Certificate on a Load Balancer?
+
+- **Security**: It ensures that data is transferred securely.
+- **Performance**: SSL offloading reduces the encryption load on servers.
+- **Reliability**: Establishing secure HTTPS connections increases user trust.
+
+Since the SSL certificate authenticates the load balancer’s identity and secures data, it is essential for applications handling sensitive information.
+
+we just need to add 
+  ssl_policy        = "-----"
+  certificate_arn   = -----
+
+
+
+**Connection Draining** is a process that allows existing connections on a load balancer to complete smoothly when a backend instance is disabled or removed for maintenance. In AWS, when using Elastic Load Balancing (ELB) or Application Load Balancer (ALB), this feature is also known as "deregistration delay." It enables ongoing requests to finish without interruption.
+
+### How Connection Draining Works
+
+1. **Backend Instance Removal Process**: When a backend instance (e.g., an EC2 instance) is to be removed from the load balancer, connection draining is activated.
+  
+2. **Completion of Existing Connections**: Current requests or open connections continue to be processed for a specified period. No new requests are routed to this instance, but the existing connections remain open until they complete.
+  
+3. **Time Limit**: A specific time limit is defined for connection draining (e.g., the default is 300 seconds in AWS). If all connections are not completed within this period, they may be forcibly terminated.
+
+### Advantages of Connection Draining
+
+- **Seamless Service**: Users are not affected by maintenance or replacement activities in the background.
+- **Improved User Experience**: Because connections are closed gracefully, the user experience remains uninterrupted.
+- **Workload Management**: Helps manage workloads on servers, providing more reliable service during maintenance or updates.
+
+### Configuring Connection Draining in AWS
+
+In AWS ELB or ALB, the **deregistration delay** setting can be configured. For example, when an instance is removed from the load balancer, the deregistration delay allows current requests to complete within a specified time. By adjusting this time limit, you can ensure a seamless user experience.
+
+# Connection Draining (Deregistration Delay) will be set with this attributes.
+  deregistration_delay = 300  # Deregistration delay süresi 300 saniye (5 dakika)
