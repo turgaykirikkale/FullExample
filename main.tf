@@ -1,7 +1,7 @@
 provider "aws" {
   region = "us-east-1"
   //environment Access ve Secret Acces Key
- 
+
 }
 data "aws_availability_zones" "available" {}
 data "aws_region" "current" {}
@@ -18,6 +18,7 @@ module "vpc" {
   source         = "./modules/vpc"
   vpc_name       = "000001"
   vpc_cidr_block = local.vpc_cidr
+
 }
 
 //We create Subnets for handle network more easy.
@@ -34,6 +35,8 @@ module "public_subnets" {
   map_public_ip_on_launch = true
 }
 
+/*
+
 module "private_subnets" {
   count             = length(local.private_subnet_cidrs)
   source            = "./modules/subnet"
@@ -44,6 +47,13 @@ module "private_subnets" {
   cidr_block        = local.private_subnet_cidrs[count.index]
 }
 
+output "subnet_private" {
+  value = module.private_subnets[*].subnet_id
+}
+
+
+*/
+
 //I need to have to put IGW for my VPC for connection to the ınternet for VPC 
 
 module "internet_gateway" {
@@ -52,6 +62,8 @@ module "internet_gateway" {
   vpc_id   = module.vpc.vpc_id
 }
 
+
+/*
 //Outbound internet access for my resources in private subnets is provided by the created NAT Gateway.
 module "natgateway" {
   source            = "./modules/natgateway"
@@ -62,6 +74,12 @@ module "natgateway" {
   }
 }
 
+output "nat_gateway_ids" {
+  value = module.natgateway.nat_gateway_ids
+}
+
+*/
+
 module "public_route_table" {
   for_each            = module.public_subnets
   source              = "./modules/routetable"
@@ -71,6 +89,7 @@ module "public_route_table" {
   subnet_id           = each.value.subnet_id
 }
 
+/*
 module "private_route_tabLe" {
   count          = length(module.private_subnets)
   source         = "./modules/routetable"
@@ -79,6 +98,7 @@ module "private_route_tabLe" {
   nat_gateway_id = module.natgateway.nat_gateway_ids[count.index % length(module.natgateway.nat_gateway_ids)]
   subnet_id      = module.private_subnets[count.index].subnet_id
 }
+*/
 
 /*
 
@@ -143,7 +163,7 @@ module "security_group_ssh" {
   ingress_cidr_blocks = ["0.0.0.0/0"]
 }
 
-
+/*
 module "security_group_private" {
   source              = "./modules/securitygroups"
   sg_name             = "Sg_${module.vpc.name}_private"
@@ -154,6 +174,8 @@ module "security_group_private" {
   ingress_protocol    = "tcp"
   ingress_cidr_blocks = ["${module.public_instance.instance_private_ip}/32"]
 }
+
+*/
 
 
 
@@ -178,6 +200,7 @@ module "public_instance" {
               EOF
 }
 
+/*
 module "private_instace" {
   source              = "./modules/ec2"
   ami_name            = "amazon_linux"
@@ -186,6 +209,7 @@ module "private_instace" {
   subnet_id           = module.private_subnets[0].subnet_id
   use_security_groups = [module.security_group_private.sg_id]
 }
+*/
 
 
 
@@ -378,7 +402,7 @@ output "efs_mount_target" {
 
 
 /*
-#ELB-ALB örneği
+#ELB-ALB EXAMPLE
 
 module "sg_alb" {
   source              = "./modules/securitygroups"
@@ -582,18 +606,56 @@ module "asg" {
 
 */
 
+#SIMPLE RDS EXAMPLE 
+
+module "security_group_rds_db" {
+  source              = "./modules/securitygroups"
+  sg_name             = "Sg_${module.vpc.name}_rds_db"
+  description         = "RDS Database Security Group"
+  vpc_id              = module.vpc.vpc_id
+  ingress_from_port   = 3306
+  ingress_to_port     = 3306
+  ingress_protocol    = "tcp"
+  ingress_cidr_blocks = ["0.0.0.0/0"] //or we can put specific CIDR block
+}
+
+module "db" {
+  source                 = "./modules/rds"
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  replica_instance_class = "db.t3.micro"
+  replica_count          = 3
+  db_name                = "mysqldb"
+  username               = "admin"
+  password               = "12345678ab?"
+  allocated_storage      = 10
+  multi_Az               = true
+  publicly_accessible    = true
+  skip_final_snapshot    = true
+  name                   = "Database_RDS_Instance_mysql"
+  subnet_ids             = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}", ]
+  security_group_id      = ["${module.security_group_rds_db.sg_id}"]
+}
+
+
+output "db_instance_endpoint" {
+  value = module.db.db_instance_endpoint
+}
+
+output "db_instance_arn" {
+  value = module.db.db_instance_arn
+}
+
+output "replicas_endpoint" {
+  value = module.db.read_replica_endpoints
+}
+
 
 
 
 output "subnet_public" {
   value = module.public_subnets
-}
-
-output "subnet_private" {
-  value = module.private_subnets[*].subnet_id
-}
-output "nat_gateway_ids" {
-  value = module.natgateway.nat_gateway_ids
 }
 
 output "AZ" {
