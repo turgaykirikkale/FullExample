@@ -1,8 +1,15 @@
-variable "s3_bucket_arn" {
-  type        = string
-  description = "S3 Bucket ARN"
+variable "role" {
+  description = "role"
 }
-variable "s3_bucket_name" {
+variable "role_name" {
+  description = "Role name"
   type        = string
-  description = "S3 bucket name"
+}
+
+variable "policy" {
+  description = "policy"
+}
+variable "policy_name" {
+  description = "Policy name"
+  type        = string
 }
