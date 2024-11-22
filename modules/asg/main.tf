@@ -2,7 +2,10 @@ resource "aws_launch_template" "launch_template" {
   name_prefix   = "${var.template_name}-"
   image_id      = var.ami_id
   instance_type = var.instance_type
-
+  iam_instance_profile {
+    name = var.role_name
+   // arn  = var.role_arn
+  }
   network_interfaces {
     associate_public_ip_address = true
     security_groups             = var.security_groups

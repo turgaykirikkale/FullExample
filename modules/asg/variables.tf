@@ -52,3 +52,13 @@ variable "target_group_arn" {
   type        = list(string)
   default     = []
 }
+variable "role_name" {
+  description = "IAM role name"
+  type        = string
+  default     = null
+}
+variable "role_arn" {
+  description = "IAM role arn"
+  type        = string
+  default     = null
+}
