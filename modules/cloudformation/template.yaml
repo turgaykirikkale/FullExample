@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A CloudFormation template to create an EC2 instance with Auto Scaling, Elastic IP, Security Group, Application Load Balancer, and configurable VPC and Subnets.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 instance type.
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair to enable SSH access to the instance.
+
+  InstanceName:
+    Type: String
+    Default: "MyEC2Instance"
+    Description: The name of the EC2 instance.
+
+  MinInstanceCount:
+    Type: Number
+    Default: 1
+    Description: Minimum number of EC2 instances in the Auto Scaling group.
+
+  MaxInstanceCount:
+    Type: Number
+    Default: 3
+    Description: Maximum number of EC2 instances in the Auto Scaling group.
+
+  VPCId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the resources will be launched.
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: First public subnet ID where EC2 instances and ALB will be deployed.
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Second public subnet ID where EC2 instances and ALB will be deployed.
+
+Resources:
+  MySecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Allow SSH, HTTP, and ALB traffic"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0" # SSH için herkese açık
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: "0.0.0.0/0" # HTTP için herkese açık
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: "0.0.0.0/0" # ALB'ye gelen HTTP trafiği
+
+  MyElasticIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      InstanceId: !Ref MyEC2Instance # Elastic IP'yi EC2 instance'a bağla
+
+  MyLaunchConfiguration:
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: ami-0c55b159cbfafe1f0 # Örnek bir AMI ID'si, bunu güncel bir ID ile değiştirmeniz gerekebilir.
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref MySecurityGroup
+      AssociatePublicIpAddress: true # EC2 instance'ına public IP ekle
+
+  MyAutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      LaunchConfigurationName: !Ref MyLaunchConfiguration
+      MinSize: !Ref MinInstanceCount
+      MaxSize: !Ref MaxInstanceCount
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2 # Public subnet ID'leri parametre olarak alınıyor
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      LoadBalancerNames:
+        - !Ref MyApplicationLoadBalancer
+
+  MyApplicationLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: "MyALB"
+      Subnets:
+        - !Ref PublicSubnet1 # ALB için parametre olarak alınan public subnet
+        - !Ref PublicSubnet2 # ALB için parametre olarak alınan public subnet
+      SecurityGroups:
+        - !Ref MySecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+
+  MyTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Name: "MyTargetGroup"
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPCId # VPC ID'si parametre olarak alınıyor
+      HealthCheckPath: "/"
+      Matcher:
+        HttpCode: 200
+
+  MyListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: 200
+            ContentType: text/plain
+            MessageBody: "OK"
+      LoadBalancerArn: !Ref MyApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  InstanceId:
+    Description: "Instance ID of the EC2 instance"
+    Value: !Ref MyEC2Instance
+
+  ElasticIP:
+    Description: "Elastic IP of the EC2 instance"
+    Value: !Ref MyElasticIP
+
+  LoadBalancerDNS:
+    Description: "DNS name of the Application Load Balancer"
+    Value: !GetAtt MyApplicationLoadBalancer.DNSName
