@@ -1,6 +1,6 @@
 provider "aws" {
   region = "us-east-1"
-  //environment Access ve Secret Acces Key
+  //environment Access ve Secret Acces key
 
 }
 data "aws_availability_zones" "available" {}
@@ -180,7 +180,7 @@ module "security_group_private" {
 
 
 #We used public instance for reaching private instance
-
+/*
 module "public_instance" {
   source              = "./modules/ec2"
   ami_name            = "amazon_linux"
@@ -199,6 +199,7 @@ module "public_instance" {
               echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
               EOF
 }
+*/
 
 /*
 module "private_instace" {
@@ -228,8 +229,6 @@ module "spot_instance" {
 /*
 
 PLACEMENT GROUP EXAMPLE
-
-
 module "placementgroup_spread" {
   source                   = "./modules/placementgroup"
   placement_group_name     = "spread_1"
@@ -606,7 +605,9 @@ module "asg" {
 
 */
 
-#SIMPLE RDS EXAMPLE 
+
+/*
+# RDS EXAMPLE 
 
 module "security_group_rds_db" {
   source              = "./modules/securitygroups"
@@ -651,8 +652,513 @@ output "replicas_endpoint" {
   value = module.db.read_replica_endpoints
 }
 
+*/
 
 
+
+/*
+
+module "security_group_aurora_db" {
+  source              = "./modules/securitygroups"
+  sg_name             = "Sg_${module.vpc.name}_aurora_db"
+  description         = "RDS Cluster Database Security Group"
+  vpc_id              = module.vpc.vpc_id
+  ingress_from_port   = 3306
+  ingress_to_port     = 3306
+  ingress_protocol    = "tcp"
+  ingress_cidr_blocks = ["0.0.0.0/0"] //or we can put specific CIDR block
+}
+
+module "aurora" {
+  source                    = "./modules/aurora"
+  cluster_identifier        = "aurora-cluster-demo"
+  engine                    = "aurora-mysql"
+  engine_version            = "5.7.mysql_aurora.2.03.2"
+  db_cluster_instance_class = "db.t3.micro"
+  availability_zones        = ["us-west-2a", "us-west-2b", "us-west-2c"]
+  db_name                   = "mydb"
+  master_username           = "turgay"
+  master_password           = "12345678a?"
+  backup_retention_period   = 5
+  subnet_ids                = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}"]
+  sg_aurora                 = ["${module.security_group_aurora_db.sg_id}"]
+}
+
+
+output "aurora_cluster_arn" {
+  value = module.aurora.aurora_cluster_arn
+}
+output "aurora_writer_instance_arn" {
+  value = module.aurora.aurora_writer_instance_arn
+}
+output "aurora_reader_instance_arn" {
+  value = module.aurora.aurora_reader_instance_arn
+}
+
+*/
+
+
+
+/*
+#ELASTICACHE EXAMPLE
+
+module "security_group_elasticache_redis" {
+  source              = "./modules/securitygroups"
+  sg_name             = "Sg_${module.vpc.name}_elasticache"
+  description         = "Elasticache Redis Security Group"
+  vpc_id              = module.vpc.vpc_id
+  ingress_from_port   = 6379
+  ingress_to_port     = 6379
+  ingress_protocol    = "tcp"
+  ingress_cidr_blocks = ["0.0.0.0/0"] //or we can put specific CIDR block
+}
+
+module "elasticache" {
+  source               = "./modules/elasticache"
+  name                 = "RedisElastiCache"
+  cluster_id           = "redis-cluster"
+  engine               = "redis"
+  engine_version       = "6.x"            # Kullanmak istediğiniz Redis sürümünü seçin
+  node_type            = "cache.t3.micro" # Redis node türünü belirleyin
+  num_cache_nodes      = 1                # Küme başına node sayısını belirleyin
+  port                 = 6379
+  subnet_group_name    = "Redis-subnet-group"
+  subnet_group_ids     = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}"]
+  security_group_ids   = [module.security_group_elasticache_redis.sg_id]
+  maintenance_window   = "sun:05:00-sun:09:00" # Bakım penceresini ayarlayın
+  parameter_group_name = "default.redis6.x"    # Redis parametre grubunu belirleyin
+}
+output "elasticache_cluster_arn" {
+  value = module.elasticache.redis_cluster_arn
+}
+
+
+*/
+
+
+
+/*
+#Route 53 Example
+
+module "route_53_instances" {
+  count               = 2
+  source              = "./modules/ec2"
+  ami_name            = "amazon_linux"
+  instance_type       = "t2.micro"
+  subnet_id           = module.public_subnets[keys(module.public_subnets)[0]].subnet_id
+  instance_name       = "public_instance_${count.index}"
+  use_security_groups = ["${module.security_group_http.sg_id}", "${module.security_group_https.sg_id}", "${module.security_group_ssh.sg_id}"]
+  user_data_script    = <<-EOF
+              #!/bin/bash
+              # Use this for your user data (script from top to bottom)
+              # install httpd (Linux 2 version)
+              yum update -y
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
+              EOF
+}
+
+module "route53" {
+  source      = "./modules/route53"
+  count       = length(module.route_53_instances[*].public_ip)
+  instance_ip = module.route_53_instances[count.index].public_ip
+  weight      = 100 / length(module.route_53_instances[*].public_ip)
+}
+
+
+output "hosted_zone_name" {
+  value = module.route53[*].hosted_zone_name
+}
+
+*/
+
+#SQS EXAMPLE
+/*
+module "sqs" {
+  source                     = "./modules/sqs"
+  queue_name                 = "first_sqs"
+  message_retention_seconds  = 86400 # 1 day
+  visibility_timeout_seconds = 60
+  delay_seconds              = 5
+  max_message_size           = 262144 # 256 KB
+}
+
+//role attachment
+module "role" {
+  source    = "./modules/iam"
+  role_name = "ec2-sqs-role"
+  role = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      },
+    ]
+  })
+  policy_name = "sqs-policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "sqs:SendMessage"
+        Effect   = "Allow"
+        Resource = module.sqs.queue_arn
+      },
+      {
+        Action   = "sqs:ReceiveMessage"
+        Effect   = "Allow"
+        Resource = module.sqs.queue_arn
+      },
+      {
+        Action   = "sqs:DeleteMessage"
+        Effect   = "Allow"
+        Resource = module.sqs.queue_arn
+      },
+    ]
+  })
+
+}
+
+module "asg" {
+  source          = "./modules/asg"
+  template_name   = "template_base"
+  security_groups = ["${module.security_group_http.sg_id}"]
+  subnet_ids      = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[2]].subnet_id}"]
+  instance_type   = "t2.micro"
+  ami_id          = "ami-063d43db0594b521b"
+  asg_name        = "asg_with_EC2"
+  role_name       = module.role.role_name
+  //role_arn        = module.role.role_arn
+}
+
+output "queue_url" {
+  value = module.sqs.queue_url
+}
+output "queue_arn" {
+  value = module.sqs.queue_arn
+}
+output "role_name" {
+  value = module.role.role_name
+}
+output "role_arn" {
+  value = module.role.role_arn
+}
+
+*/
+
+#KINESIS DATA STREAMS
+/*
+module "kinesis_data_stream" {
+  source      = "./modules/kinesisdatastream"
+  name        = "terraform-kinesis-test"
+  environment = "test"
+  stream_mode = "ON-DEMAND"
+  shard_level_metrics = [
+    "IncomingBytes",
+    "OutgoingBytes",
+  ]
+}
+
+module "kinesis_role" {
+  source    = "./modules/iam"
+  role_name = "kinesis-access-role"
+  role = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "kinesis.amazonaws.com"
+        }
+      }
+    ]
+  })
+  policy_name = "kinesis-policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kinesis:DescribeStream",
+          "kinesis:PutRecord",
+          "kinesis:PutRecords",
+          "kinesis:GetShardIterator",
+          "kinesis:GetRecords",
+          "kinesis:ListShards"
+        ]
+        Effect   = "Allow"
+        Resource = module.kinesis_data_stream.kinesis_stream_arn
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "producer_lambda" {
+  function_name    = "kinesis-producer"
+  handler          = "producer.lambda_handler"
+  runtime          = "python3.9"
+  role             = module.kinesis_role.role_arn
+  filename         = "producer.zip" # Zipped Lambda code
+  source_code_hash = filebase64sha256("producer.zip")
+
+  environment {
+    variables = {
+      STREAM_NAME = module.kinesis_data_stream.kinesis_stream_name
+    }
+  }
+}
+
+resource "aws_lambda_function" "consumer_lambda" {
+  function_name    = "kinesis-consumer"
+  handler          = "consumer.lambda_handler"
+  runtime          = "python3.9"
+  role             = module.kinesis_role.role_arn
+  filename         = "consumer.zip" # Zipped Lambda code
+  source_code_hash = filebase64sha256("consumer.zip")
+}
+
+resource "aws_lambda_event_source_mapping" "kinesis_consumer_mapping" {
+  event_source_arn  = module.kinesis_data_stream.kinesis_stream_arn
+  function_name     = aws_lambda_function.consumer_lambda.arn
+  starting_position = "LATEST"
+}
+
+//we can take zip file error we need to give exact path for our zip file or we should put some zip file in Terraform
+
+*/
+
+
+#LAMBDA FUNCTION
+/*
+module "lambda_role" {
+  source    = "./modules/iam"
+  role_name = "aws_iam_role_lambda"
+  role = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+  policy_name = "lambda_basic_execution_policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+module "lambda_function" {
+  source          = "./modules/lambda"
+  runtime_version = "python3.9"
+  function_name   = "My_lambda_function"
+  lambda_role_arn = module.lambda_role.role_arn
+}
+
+module "api_gateway" {
+  source               = "./modules/apigateway"
+  lambda_invoke_arn    = module.lambda_function.invoke_arn
+  lambda_function_name = module.lambda_function.lambda_function_name
+}
+
+output "endpoint_gateway" {
+  value = module.api_gateway.api_endpoint
+}
+
+*/
+
+
+#DYNAMODB
+/*
+module "dynamoDB" {
+  source = "./modules/dynamoDB"
+}
+
+output "dynamoDB_name" {
+  value = module.dynamoDB.dynamodb_table_name
+}
+output "dynamoDB_arn" {
+  value = module.dynamoDB.dynamodb_table_arn
+}
+*/
+
+
+#REDSHIFT EXAMPLE
+/*
+resource "aws_iam_role" "redshift_role" {
+  name = "redshift-iam-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "redshift.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "redshift_policy" {
+  role       = aws_iam_role.redshift_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+}
+
+module "security_group_redshift" {
+  source              = "./modules/securitygroups"
+  sg_name             = "Sg_${module.vpc.name}_redshift"
+  description         = "Security Group Redshift"
+  vpc_id              = module.vpc.vpc_id
+  ingress_from_port   = 5439
+  ingress_to_port     = 5439
+  ingress_protocol    = "tcp"
+  ingress_cidr_blocks = ["0.0.0.0/0"] //or we can put specific CIDR block
+}
+
+module "redshift" {
+  source = "./modules/redshift"
+
+  cluster_identifier = "example-cluster"
+  node_type          = "dc2.large"
+  master_username    = "admin"
+  master_password    = "SecurePassw0rd!"
+  cluster_type       = "single-node"
+  database_name      = "exampledb"
+  port               = 5439
+  iam_roles          = [aws_iam_role.redshift_role.arn]
+  security_group_ids = [module.security_group_redshift.sg_id]
+  subnet_group_name  = "example-subnet-group"
+  subnet_ids         = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[2]].subnet_id}"]
+  tags = {
+    Environment = "Production"
+  }
+}
+*/
+
+#Cloud Formation example
+
+
+/*
+module "cloud_formation" {
+  source               = "./modules/cloudformation"
+  cloud_formation_name = "CloudFormationExample"
+  parameters = {
+    InstanceName     = "Instances"
+    InstanceType     = "t3.micro"
+    KeyName          = "example_key_name"
+    MinInstanceCount = 1
+    MaxInstanceCount = 3
+    VPCId            = "${module.vpc.vpc_id}"
+    PublicSubnet1    = "${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}"
+    PublicSubnet2    = "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}"
+  }
+}
+
+
+*/
+
+
+#ECR Example
+/*
+module "ecr" {
+  source = "./modules/ecr"
+}
+*/
+
+
+#EKS Example
+/*
+# EKS Cluster IAM Role
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "EKSClusterRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = { Service = "eks.amazonaws.com" }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_policies" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
+  ])
+
+  policy_arn = each.value
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+# EKS Node IAM Role
+resource "aws_iam_role" "eks_node_role" {
+  name = "EKSNodeRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = { Service = "ec2.amazonaws.com" }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_node_policies" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  ])
+
+  policy_arn = each.value
+  role       = aws_iam_role.eks_node_role.name
+}
+
+
+module "eks" {
+  source             = "./modules/eks"
+  cluster_name       = "my-eks-cluster"
+  cluster_version    = "1.27"
+  cluster_role_arn   = aws_iam_role.eks_cluster_role.arn
+  node_role_arn      = aws_iam_role.eks_node_role.arn
+  subnet_ids         = ["${module.public_subnets[keys(module.public_subnets)[0]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[1]].subnet_id}", "${module.public_subnets[keys(module.public_subnets)[2]].subnet_id}"]
+  desired_capacity   = 2
+  max_capacity       = 3
+  min_capacity       = 1
+  node_instance_type = "t3.micro"
+}
+*/
 
 output "subnet_public" {
   value = module.public_subnets
@@ -666,9 +1172,16 @@ output "public_cidr" {
   value = local.public_subnet_cidrs
 }
 
+//we can here S3 Backups function for backups with lambda.
+//we can use aws_dax_cluster for accelerator.
+
+/*
+
 output "public_instance_ip" {
   value = module.public_instance.instance_private_ip
 }
+
+*/
 
 
 
